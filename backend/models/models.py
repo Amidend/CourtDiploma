@@ -1,11 +1,12 @@
-from sqlalchemy import Column, Integer, String, Date, ForeignKey, MetaData, Table
-from sqlalchemy.orm import relationship
-from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy import Column, Integer, String, Date, LargeBinary, ForeignKey
 
-from sqlalchemy import Column, Integer, String, Date, ForeignKey
-from sqlalchemy.orm import relationship
+from .database import Base
 
-Base = declarative_base()
+class Template(Base):
+    __tablename__ = "templates"
+    id = Column(Integer, primary_key=True)
+    name = Column(String(255), nullable=False)
+    content = Column(LargeBinary, nullable=False)
 
 class Judge(Base):
     __tablename__ = "judges"
@@ -36,9 +37,18 @@ class Document(Base):
     description = Column(String(255), nullable=False)
     type = Column(String(255), nullable=False)
     date = Column(Date, nullable=False)
-    judge_id = Column(Integer, ForeignKey("judges.id"), nullable=False)
-    company_id = Column(Integer, ForeignKey("companies.id"), nullable=False)
-    file = Column(String(255), nullable=False)
-
+    judge_id = Column(Integer, ForeignKey("judges.id"), nullable=True)
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=True)
+    file = Column(String(255), nullable=True)
+    def __json__(self):
+        return {
+            "id": self.id,
+            "name": self.name,
+            "description": self.description,
+            # ... other attributes you want to include
+        }
+'''
     judge = relationship(Judge)
     company = relationship(Company)
+    template = relationship(Template)
+'''
