@@ -1,7 +1,19 @@
-from sqlalchemy import Column, Integer, String, Date, LargeBinary, ForeignKey
+
+from sqlalchemy import Column, Integer, String,Date, LargeBinary, ForeignKey
+from passlib.hash import bcrypt
+from sqlalchemy.orm import relationship
 
 from .database import Base
 
+class User(Base):
+    __tablename__ = "users"
+    id = Column(Integer, primary_key=True, index=True)
+    username = Column(String, unique=True, index=True)
+    password_hash = Column(String)
+    role = Column(String) # 'admin' or 'user'
+
+    def verify_password(self, password):
+        return bcrypt.verify(password, self.password_hash)
 class Template(Base):
     __tablename__ = "templates"
     id = Column(Integer, primary_key=True)
@@ -31,7 +43,6 @@ class Company(Base):
 
 class Document(Base):
     __tablename__ = "documents"
-
     id = Column(Integer, primary_key=True)
     name = Column(String(255), nullable=False)
     description = Column(String(255), nullable=False)
@@ -39,16 +50,19 @@ class Document(Base):
     date = Column(Date, nullable=False)
     judge_id = Column(Integer, ForeignKey("judges.id"), nullable=True)
     company_id = Column(Integer, ForeignKey("companies.id"), nullable=True)
-    file = Column(String(255), nullable=True)
+    file = Column(LargeBinary, nullable=True)
+
+    judge = relationship("Judge", backref="documents")
+    company = relationship("Company", backref="documents")
+
     def __json__(self):
         return {
             "id": self.id,
             "name": self.name,
             "description": self.description,
-            # ... other attributes you want to include
+            "type": self.type,
+            "date": self.date,
+            "judge_id": self.judge_id,
+            "company_id": self.company_id,
+            "file": self.file
         }
-'''
-    judge = relationship(Judge)
-    company = relationship(Company)
-    template = relationship(Template)
-'''

@@ -1,0 +1,6 @@
+@startuml
+class GenerateDocRequest {
+        __init__()
+}
+BaseModel <|-- GenerateDocRequest
+@enduml

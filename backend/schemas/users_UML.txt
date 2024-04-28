@@ -1,0 +1,22 @@
+@startuml
+class UserBase {
+        __init__()
+}
+class UserCreate {
+        __init__()
+}
+class UserUpdate {
+        __init__()
+}
+class User {
+        __init__()
+}
+class UserResponse {
+        __init__()
+}
+BaseModel <|-- UserBase
+UserBase <|-- UserCreate
+UserBase <|-- UserUpdate
+BaseModel <|-- User
+BaseModel <|-- UserResponse
+@enduml

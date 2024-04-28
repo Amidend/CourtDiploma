@@ -1,53 +1,79 @@
-import React from 'react';
-import { BrowserRouter as Router, Routes, Route, Link } from 'react-router-dom';
-import UploadTemplate from './components/UploadTemplate'; // Assuming UploadTemplate.jsx is in the same directory
-import GenerateDoc from './components/GenerateDoc';
+import React, { useState, useEffect } from 'react';
+  import axios from 'axios';
+  import { useNavigate } from 'react-router-dom';
+  import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'; 
 
-class ErrorBoundary extends React.Component {
-  constructor(props) {
-    super(props);
-    this.state = { hasError: false };
-  }
 
-  static getDerivedStateFromError(error) {
-    return { hasError: true };
-  }
+  import Login from './components/Login';
+  import Register from './components/Register';
+  import ProtectedRoute from './components/ProtectedRoute';
+  import AdminHome from './admin/AdminHome';
+  import UserHome from './users/UserHome';
 
-  componentDidCatch(error, errorInfo) {
-    console.error(error, errorInfo);
-  }
-
-  render() {
-    if (this.state.hasError) {
-      return <h1>Something went wrong.</h1>;
+  class ErrorBoundary extends React.Component {
+    constructor(props) {
+      super(props);
+      this.state = { hasError: false };
     }
-    return this.props.children; 
+
+    static getDerivedStateFromError(error) {
+      return { hasError: true };
+    }
+
+    componentDidCatch(error, errorInfo) {
+      console.error(error, errorInfo);
+    }
+
+    render() {
+      if (this.state.hasError) {
+        return <h1>Something went wrong.</h1>;
+      }
+      return this.props.children; 
+    }
   }
-}
 
 
-function App() {
-  return (
-    <Router> 
-      <div>
-        <Link to="/upload">
-          <button className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">
-            Upload Template
-          </button>
-        </Link>
-        <Link to="/generate"> 
-          <button className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">
-            GenerateDoc
-          </button>
-        </Link>
-        <Routes> 
-          <Route path="/upload" element={<UploadTemplate />} /> 
-          <Route path="/generate" element={<GenerateDoc />} />
-          {/* Other routes for your application */} 
-        </Routes>
+  function App() {
+    const [userRole, setUserRole] = useState('');
+  
+    useEffect(() => {
+      const roleFromCookie = document.cookie.split('; ').find((row) => row.startsWith('user_role='))?.split('=')[1];
+      setUserRole(roleFromCookie);
+    }, []);
+  
+    return (
+      <div >
+
+      <Router>
+        <ErrorBoundary>
+       
+            <Routes>
+            <Route path="/admin" element={<ProtectedRoute isAdmin><AdminHome /></ProtectedRoute>} />
+            <Route path="/user" element={<ProtectedRoute isUser><UserHome /></ProtectedRoute>} /> 
+              <Route path="/" element={
+                userRole === 'admin' ? (
+                  <ProtectedRoute isAdmin>
+                    <AdminHome /> {/* Render Admin homepage */}
+                  </ProtectedRoute>
+                ) : userRole === 'user' ? (
+                  <ProtectedRoute isUser>
+                    <UserHome /> {/* Render User homepage */}
+                  </ProtectedRoute>
+                ) : (
+                  <Navigate to="/login" replace /> // Redirect to login if not authenticated
+                )
+              } />
+  
+
+              {/* ... */}
+              <Route path="/login" element={<Login />} />
+              <Route path="/register" element={<Register />} />
+            </Routes>
+        
+        </ErrorBoundary>
+      </Router>
       </div>
-    </Router>
-  );
-}
-
-export default App;
+    );
+  }
+  
+  export default App;

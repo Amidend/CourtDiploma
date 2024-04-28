@@ -1,0 +1,24 @@
+@startuml
+class User {
+    verify_password()
+        __init__()
+}
+class Template {
+        __init__()
+}
+class Judge {
+        __init__()
+}
+class Company {
+        __init__()
+}
+class Document {
+    __json__()
+        __init__()
+}
+Base <|-- User
+Base <|-- Template
+Base <|-- Judge
+Base <|-- Company
+Base <|-- Document
+@enduml

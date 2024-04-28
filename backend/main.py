@@ -1,15 +1,37 @@
-from datetime import datetime
-from fastapi import FastAPI, File, UploadFile, Form, Depends, APIRouter
-from typing import List
-from docx import Document
-from io import BytesIO
+import datetime
+import io
+from urllib import response
 
+from fastapi import FastAPI, File, UploadFile, Form, Depends, APIRouter, HTTPException
+from typing import List
+from io import BytesIO
+from docx import Document
+from fastapi.responses import StreamingResponse
+from fastapi.params import Body
+from urllib.parse import quote
+
+from pydantic import BaseModel
+from sqlalchemy.exc import SQLAlchemyError, IntegrityError
 from sqlalchemy.orm import Session
 from fastapi.middleware.cors import CORSMiddleware
+from starlette import status
+from starlette.responses import JSONResponse, FileResponse
+
+from backend.aut.UserCreate import UserCreate
+from backend.aut.aut import authenticate_user, get_admin_user
+from backend.models import models
+from backend.routers import judges, companies, templates, users, documents
 from models.database import get_db, create_tables  # Import database session
-from models.models import Template, Document, Judge, Company  # Import SQLAlchemy models
+from models.models import Template, Judge, Company, User  # Import SQLAlchemy models
+from fastapi import APIRouter, Depends
+from fastapi.security import OAuth2PasswordRequestForm
+from fastapi import APIRouter, Depends, Response
+
 
 app = FastAPI()
+
+from backend.models.models import Judge
+from backend.models.database import get_db
 
 router = APIRouter()
 
@@ -41,38 +63,69 @@ async def upload_template(file: UploadFile = File(...), db: Session = Depends(ge
     db.refresh(template)
     return {"message": f"Template '{file.filename}' uploaded successfully with ID: {template.id}"}
 
-
-# User endpoint to generate document
+class GenerateDocRequest(BaseModel):
+    template_name: int
+    data: List[str]
+# СайтЭноном.docx
 @app.post("/user/generate_document")
-async def generate_document(template_id: int = Form(...), data: List[str] = Form(...), db: Session = Depends(get_db)):
-    template = db.query(Template).get(template_id)
+async def generate_document(
+        request_data: GenerateDocRequest = Body(...),
+        db: Session = Depends(get_db),
+):
+    # 1. Retrieve the template content
+    template = db.query(Template).filter_by(id=request_data.template_name).first()
     if not template:
-        return {"error": "Template not found."}
+        raise HTTPException(status_code=404, detail="Template not found")
 
-    with BytesIO(template.content) as template_file:
-        doc = Document(template_file)
+    document = Document(BytesIO(template.content))
 
+    # 3. Replace placeholders with data (assuming placeholders are like {0}, {1}, etc.)
+    # Разбиваем его на части с помощью запятой
+    parts = request_data.data
+
+    data = [db.query(Judge).filter_by(id=request_data.data[0]).first().fio,db.query(Company).filter_by(id=request_data.data[1]).first().name]
+    print(data)
     for i, value in enumerate(data):
-        for paragraph in doc.paragraphs:
-            paragraph.text = paragraph.text.replace(f"{{{{{i}}}}}", value)
+        for paragraph in document.paragraphs:
+            paragraph.text = paragraph.text.replace("{" + str(i) + "}", value)
+        for table in document.tables:
+            for row in table.rows:
+                for cell in row.cells:
+                    cell.text = cell.text.replace("{" + str(i) + "}", value)
 
-    # Save the generated document to the database
-    temp_file = BytesIO()
-    doc.save(temp_file)
-    generated_doc = Document(
-        name=f"generated_{template.name}",
+    # 4. Save the document to a BytesIO object
+    new_file = BytesIO()
+    document.save(new_file)
+    new_file.seek(0)
+
+
+
+
+
+
+    document_record = models.Document(
+        name=f"{request_data.template_name}_generated",
         description="Generated document",
         type="docx",
         date=datetime.date.today(),
-        # ... other document fields ...
-        file=temp_file.getvalue()  # Store the document content as bytes
+        judge_id = parts[0],
+        company_id = parts[1],
+        file=new_file.getvalue(),  # Store the file content directly
     )
-    db.add(generated_doc)
+    db.add(document_record)
     db.commit()
-    db.refresh(generated_doc)
+    db.refresh(document_record)
 
-    print("Response data:", generated_doc)  # Print before returning
-    return {"message": f"Document generated successfully with ID: {generated_doc.id}"}
+    encoded_filename = quote(f"{request_data.template_name}_generated.docx")
+
+    # Return the file as a streaming response
+    return StreamingResponse(
+        new_file,
+        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        headers={
+            "Content-Disposition": f"attachment; filename*=UTF-8''{encoded_filename}"
+        },
+    )
 
 @router.get("/options")
 async def get_selection_options(db: Session = Depends(get_db)):
@@ -90,7 +143,59 @@ async def get_selection_options(db: Session = Depends(get_db)):
         "companies": [{"id": c[0], "name": c[1]} for c in companies],
     }
 
+
+
+#aut
+@router.post("/users", dependencies=[Depends(get_admin_user)])
+async def register_user(user: UserCreate, db: Session = Depends(get_db)):
+    try:
+        pass
+        return
+    except IntegrityError as e:
+        # Handle username uniqueness constraint violation
+        db.rollback()
+        raise HTTPException(status_code=400, detail="Username already exists")
+    except SQLAlchemyError as e:
+        # Handle other SQLAlchemy errors
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Database error: {e}")
+
+@router.post("/login")
+async def login(response: Response, db: Session = Depends(get_db), data: dict = Body(...)):
+    try:
+        username = data.get("username")
+        password = data.get("password")
+
+        if not username or not password:
+            raise HTTPException(status_code=422, detail="Username and password are required")
+
+        user = authenticate_user(db, username, password)
+        if not user:
+            raise HTTPException(status_code=401, detail="Invalid credentials")
+
+        return JSONResponse(status_code=200, content={"userId": user.id, "role": user.role})
+    except HTTPException as e:
+        raise e
+
+
+
+@router.post("/logout")
+async def logout(response: Response):
+    response.delete_cookie(key="user_id")
+    return JSONResponse(content={"message": "Logout successful"})
+
+
+
+
+
+
+app.include_router(judges.router)
+
 app.include_router(router)
+app.include_router(documents.router)
+app.include_router(companies.router)
+app.include_router(templates.router)
+app.include_router(users.router)
 
 if __name__ == "__main__":
     import uvicorn
